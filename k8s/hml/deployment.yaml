@@ -20,9 +20,9 @@ spec:
       securityContext:
         runAsUser: 999
         runAsGroup: 999
-      nodeSelector:
-        kubernetes.io/hostname: k8s-worker-1
-      
+      #nodeSelector:
+      #  kubernetes.io/hostname: k8s-worker-1
+
     
 
       containers:
