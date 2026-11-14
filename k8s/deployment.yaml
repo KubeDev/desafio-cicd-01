@@ -4,6 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: postgre
+
 spec:
   replicas: 1
   selector:
@@ -28,11 +29,14 @@ spec:
             - name: postgres
               containerPort: 5432
               protocol: TCP
+
 ---
+
 apiVersion: v1
 kind: Service
 metadata:
   name: postgre
+  
 spec:
   type: ClusterIP
   selector:
@@ -42,12 +46,15 @@ spec:
       port: 5432
       targetPort: 5432
       protocol: TCP
+
 ---
+
 # Deploy da Aplicação Web
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: reviewfilmes
+  
 spec:
   replicas: 1
   selector:
@@ -70,11 +77,14 @@ spec:
             - name: http
               containerPort: 8080
               protocol: TCP
+
 ---
+
 apiVersion: v1
 kind: Service
 metadata:
   name: reviewfilmes
+  
 spec:
   type: ClusterIP
   selector:
@@ -90,10 +100,11 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: reviewfilmes
+  
 spec:
   ingressClassName: traefik
   rules:
-    - host: homologacao.networkshtech.local
+    - host: default.networkshtech.local
       http:
         paths:
           - path: /
