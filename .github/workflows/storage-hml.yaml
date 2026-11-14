@@ -2,6 +2,11 @@ name: Provisionamento Storage HML
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feature/ambientes-hml-prod
+    paths:
+      - ".github/workflows/storage-hml.yaml"
 
 jobs:
   storage:
