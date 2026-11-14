@@ -22,3 +22,9 @@ jobs:
       
       - name: Verifica Resultado do Provisionamento
         run: kubectl get pv pv-postgres-hml
+
+      - name: Provisionar PVC
+        run: kubectl apply -f k8s/hml/pvc-postgres-hml.yaml
+
+      - name: Verifica Resultado do PVC
+        run: kubectl get pvc pvc-postgres-hml -n hml
