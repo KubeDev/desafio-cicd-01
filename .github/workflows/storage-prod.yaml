@@ -1,0 +1,31 @@
+
+name: Provisionamento Storage PROD
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/ambientes-hml-prod
+    paths:
+      - ".github/workflows/storage-prod.yaml"
+
+jobs:
+  storage:
+    name: Provisionar PV PROD
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Provisionar PersistentVolume
+        run: kubectl apply -f k8s/prod/pv-postgres-prod.yaml
+
+      - name: Verificar resultado do provisionamento
+        run: kubectl get pv pv-postgres-prod
+
+      - name: Provisionar PVC
+        run: kubectl apply -f k8s/prod/pvc-postgres-prod.yaml
+
+      - name: Aguardar PVC ficar Bound
+        run: kubectl wait --for=jsonpath='{.status.phase}'=Bound pvc/pvc-postgres-prod -n prod --timeout=60s
