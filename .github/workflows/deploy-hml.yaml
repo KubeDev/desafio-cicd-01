@@ -1,13 +1,20 @@
+
 name: Deploy Homologação
 
 on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Tag da imagem Docker para homologação"
+        required: true
+        type: string
+
   workflow_dispatch:
-  push:
-    branches:
-      - feature/ambientes-hml-prod
-    paths:
-      - ".github/workflows/deploy-hml.yaml"
-      - "k8s/hml/deployment.yaml"
+    inputs:
+      image_tag:
+        description: "Tag da imagem Docker para homologação"
+        required: true
+        type: string
 
 jobs:
   deploy-hml:
@@ -23,7 +30,7 @@ jobs:
           kubectl apply --dry-run=client \
             -f k8s/hml/deployment.yaml \
             -n hml
-      
+
       - name: Verificar pré-requisitos HML
         run: |
           kubectl wait \
@@ -34,8 +41,12 @@ jobs:
 
           kubectl get secret postgres-credentials -n hml -o name
 
-      - name: Aplicar manifestos HML
-        run: kubectl apply -f k8s/hml/deployment.yaml
+      - name: Aplicar manifestos HML com imagem versionada
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          sed "s|networkshtech/desafio-cicd:latest|networkshtech/desafio-cicd:${IMAGE_TAG}|g" \
+            k8s/hml/deployment.yaml | kubectl apply -n hml -f -
 
       - name: Verificar rollout HML
         run: |
