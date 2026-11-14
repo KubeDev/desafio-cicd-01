@@ -1,0 +1,17 @@
+
+name: Pipeline CI/CD PROD
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag da imagem Docker validada em HML"
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    name: Promover imagem para PROD
+    uses: ./.github/workflows/deploy-prod.yaml
+    with:
+      image_tag: ${{ inputs.image_tag }}

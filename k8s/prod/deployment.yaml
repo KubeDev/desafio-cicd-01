@@ -1,0 +1,149 @@
+
+# Deploy do PostgreSQL
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgre
+  namespace: prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgre
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: postgre
+    spec:
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+      nodeSelector:
+        kubernetes.io/hostname: k8s-worker-1
+
+      containers:
+        - name: postgre
+          image: postgres:13.1
+
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: password
+
+            - name: POSTGRES_USER
+              value: "reviewfilmes"
+
+            - name: POSTGRES_DB
+              value: "reviewfilmes"
+
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: pvc-postgres-prod
+
+---
+# Service do PostgreSQL
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgre
+  namespace: prod
+spec:
+  type: ClusterIP
+  selector:
+    app: postgre
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+
+---
+# Deploy da Aplicação Web
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reviewfilmes
+  namespace: prod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reviewfilmes
+  template:
+    metadata:
+      labels:
+        app: reviewfilmes
+    spec:
+      containers:
+        - name: reviewfilmes
+          image: networkshtech/desafio-cicd:latest
+
+          env:
+            - name: ASPNETCORE_HTTP_PORTS
+              value: "8080"
+
+            - name: ConnectionStrings__DefaultConnection
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: connection-string
+
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+
+---
+# Service da Aplicação Web
+apiVersion: v1
+kind: Service
+metadata:
+  name: reviewfilmes
+  namespace: prod
+spec:
+  type: ClusterIP
+  selector:
+    app: reviewfilmes
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+
+---
+# Ingress Traefik
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: reviewfilmes
+  namespace: prod
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: producao.networkshtech.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: reviewfilmes
+                port:
+                  number: 80
