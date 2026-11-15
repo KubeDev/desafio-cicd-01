@@ -41,14 +41,65 @@ jobs:
 
           kubectl get secret postgres-credentials -n hml -o name
 
+      - name: Registrar imagem anterior
+        id: previous
+        run: |
+          IMAGE=$(kubectl get deployment reviewfilmes \
+            -n hml \
+            -o jsonpath='{.spec.template.spec.containers[?(@.name=="reviewfilmes")].image}')
+
+          if [ -z "$IMAGE" ]; then
+            echo "ERRO: Imagem anterior não encontrada."
+            exit 1
+          fi
+
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "Imagem anterior: $IMAGE"
+
       - name: Aplicar manifestos HML com imagem versionada
+        id: deploy
         env:
           IMAGE_TAG: ${{ inputs.image_tag }}
         run: |
           sed "s|networkshtech/desafio-cicd:latest|networkshtech/desafio-cicd:${IMAGE_TAG}|g" \
             k8s/hml/deployment.yaml | kubectl apply -n hml -f -
 
-      - name: Verificar rollout HML
+      - name: Verificar rollout Review-Filmes
+        id: rollout_app
         run: |
-          kubectl rollout status deployment/postgre -n hml --timeout=180s
-          kubectl rollout status deployment/reviewfilmes -n hml --timeout=180s
+          kubectl rollout status deployment/reviewfilmes \
+            -n hml \
+            --timeout=180s
+
+      - name: Rollback automático Review-Filmes
+        if: ${{ failure() && steps.previous.outcome == 'success' && (steps.deploy.outcome == 'failure' || steps.rollout_app.outcome == 'failure') }}
+        env:
+          PREVIOUS_IMAGE: ${{ steps.previous.outputs.image }}
+        run: |
+          CURRENT_IMAGE=$(kubectl get deployment reviewfilmes \
+            -n hml \
+            -o jsonpath='{.spec.template.spec.containers[?(@.name=="reviewfilmes")].image}')
+
+          if [ "$CURRENT_IMAGE" = "$PREVIOUS_IMAGE" ]; then
+            echo "A imagem não mudou. Nenhum rollback necessário."
+            exit 0
+          fi
+
+          echo "Falha no deploy. Restaurando imagem anterior: $PREVIOUS_IMAGE"
+
+          kubectl set image deployment/reviewfilmes \
+            reviewfilmes="$PREVIOUS_IMAGE" \
+            -n hml
+
+          kubectl rollout status deployment/reviewfilmes \
+            -n hml \
+            --timeout=180s
+
+          echo "Imagem anterior restaurada."
+
+      - name: Verificar rollout PostgreSQL
+        if: ${{ success() }}
+        run: |
+          kubectl rollout status deployment/postgre \
+            -n hml \
+            --timeout=180s

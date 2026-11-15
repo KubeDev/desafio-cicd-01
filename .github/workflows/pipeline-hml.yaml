@@ -6,6 +6,9 @@ on:
     branches:
       - main
       - feature/ambientes-hml-prod
+concurrency:
+  group: deploy-hml
+  cancel-in-progress: false
 
 jobs:
   build:
