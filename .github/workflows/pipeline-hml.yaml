@@ -71,6 +71,7 @@ jobs:
 
   deploy-prod:
     name: Promover HML para PROD
+    if: github.ref == 'refs/heads/main'
     needs: [deploy]
     uses: ./.github/workflows/deploy-prod.yaml
     with:
