@@ -1,3 +1,4 @@
+
 name: Pipeline CI/CD HML
 
 on:
@@ -6,6 +7,7 @@ on:
     branches:
       - main
       - feature/ambientes-hml-prod
+
 concurrency:
   group: deploy-hml
   cancel-in-progress: false
@@ -39,17 +41,17 @@ jobs:
     steps:
       - name: Obtendo o código do projeto
         uses: actions/checkout@v4
-     
+
       - name: Analise do Dockerfile
         uses: hadolint/hadolint-action@v3.4.0
         with:
           dockerfile: ./src/Review-Filmes.Web/Dockerfile
-      
+
       - name: Efetuando o Login no Docker Hub
         uses: docker/login-action@v4.8.0
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME}}
-          password: ${{ secrets.DOCKERHUB_PWD}}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PWD }}
 
       - name: Build e Push da imagem HML
         uses: docker/build-push-action@v7.4.0
@@ -64,5 +66,12 @@ jobs:
     name: Deploy HML
     needs: [release]
     uses: ./.github/workflows/deploy-hml.yaml
+    with:
+      image_tag: hml-${{ github.sha }}
+
+  deploy-prod:
+    name: Promover HML para PROD
+    needs: [deploy]
+    uses: ./.github/workflows/deploy-prod.yaml
     with:
       image_tag: hml-${{ github.sha }}
