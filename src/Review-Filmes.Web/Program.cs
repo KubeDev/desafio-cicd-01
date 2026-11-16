@@ -1,3 +1,4 @@
+
 using Microsoft.EntityFrameworkCore;
 using Prometheus;
 using Review_Filmes.Web.Entity;
@@ -7,27 +8,30 @@ using ReviewFilmes.Api.Entity;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-				options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<IFilmeRepository, FilmeRepository>();
 builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
 
-// Add services to the container.
+// Health Checks
+builder.Services.AddHealthChecks();
+
 builder.Services.AddControllersWithViews();
 
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
-	var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-	db.Database.Migrate();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
 }
 
-// Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
 }
+
 app.UseStaticFiles();
 
 app.UseRouting();
@@ -39,9 +43,13 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
+// Endpoints de Health Check
+app.MapHealthChecks("/health/live");
+app.MapHealthChecks("/health/ready");
+
 app.UseEndpoints(endpoints =>
 {
-	endpoints.MapMetrics();
+    endpoints.MapMetrics();
 });
 
 app.Run();

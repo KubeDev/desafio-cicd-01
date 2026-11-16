@@ -1,0 +1,159 @@
+
+name: Deploy Homologação
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Tag da imagem Docker para homologação"
+        required: true
+        type: string
+
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag da imagem Docker para homologação"
+        required: true
+        type: string
+
+jobs:
+  deploy-hml:
+    name: Deploy Kubernetes HML
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Validar manifesto Kubernetes HML
+        run: |
+          kubectl apply --dry-run=client \
+            -f k8s/hml/deployment.yaml \
+            -n hml
+
+      - name: Verificar pré-requisitos HML
+        run: |
+          kubectl wait \
+            --for=jsonpath='{.status.phase}'=Bound \
+            pvc/pvc-postgres-hml \
+            -n hml \
+            --timeout=60s
+
+          kubectl get secret postgres-credentials -n hml -o name
+
+      - name: Validar estado atual do Review-Filmes
+        run: |
+          set -euo pipefail
+
+          echo "Verificando se o Deployment atual está saudável..."
+
+          kubectl rollout status deployment/reviewfilmes \
+            -n hml \
+            --timeout=30s
+
+          DESIRED=$(kubectl get deployment reviewfilmes \
+            -n hml \
+            -o jsonpath='{.spec.replicas}')
+
+          READY=$(kubectl get deployment reviewfilmes \
+            -n hml \
+            -o jsonpath='{.status.readyReplicas}')
+
+          if [ "${READY:-0}" -lt "$DESIRED" ]; then
+            echo "ERRO: Deployment sem todas as réplicas prontas."
+            exit 1
+          fi
+
+          echo "Deployment saudável: $READY/$DESIRED réplicas prontas."
+
+      - name: Registrar imagem anterior
+        id: previous
+        run: |
+          set -euo pipefail
+
+          IMAGE=$(kubectl get deployment reviewfilmes \
+            -n hml \
+            -o jsonpath='{.spec.template.spec.containers[?(@.name=="reviewfilmes")].image}')
+
+          if [ -z "$IMAGE" ]; then
+            echo "ERRO: Imagem anterior não encontrada."
+            exit 1
+          fi
+
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "Imagem anterior: $IMAGE"
+
+      - name: Aplicar manifestos HML com imagem versionada
+        id: deploy
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$IMAGE_TAG" ]; then
+            echo "ERRO: Tag da imagem não informada."
+            exit 1
+          fi
+
+          sed "s|networkshtech/desafio-cicd:latest|networkshtech/desafio-cicd:${IMAGE_TAG}|g" \
+            k8s/hml/deployment.yaml | kubectl apply -n hml -f -
+
+      - name: Verificar rollout Review-Filmes
+        id: rollout_app
+        run: |
+          kubectl rollout status deployment/reviewfilmes \
+            -n hml \
+            --timeout=180s
+
+      - name: Rollback automático Review-Filmes
+        if: ${{ failure() && steps.previous.outcome == 'success' && (steps.deploy.outcome == 'failure' || steps.rollout_app.outcome == 'failure') }}
+        env:
+          PREVIOUS_IMAGE: ${{ steps.previous.outputs.image }}
+        run: |
+          set -euo pipefail
+
+          CURRENT_IMAGE=$(kubectl get deployment reviewfilmes \
+            -n hml \
+            -o jsonpath='{.spec.template.spec.containers[?(@.name=="reviewfilmes")].image}')
+
+          if [ "$CURRENT_IMAGE" = "$PREVIOUS_IMAGE" ]; then
+            echo "A imagem não mudou. Nenhum rollback necessário."
+            exit 0
+          fi
+
+          echo "Falha no deploy. Restaurando imagem anterior: $PREVIOUS_IMAGE"
+
+          export PREVIOUS_IMAGE
+
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          source = Path("k8s/hml/deployment.yaml").read_text()
+          original = "networkshtech/desafio-cicd:latest"
+          previous = os.environ["PREVIOUS_IMAGE"]
+
+          if source.count(original) != 1:
+              raise SystemExit(
+                  "ERRO: Esperada exatamente uma referência à imagem da API."
+              )
+
+          Path("/tmp/rollback-hml.yaml").write_text(
+              source.replace(original, previous)
+          )
+          PY
+
+          kubectl apply -n hml -f /tmp/rollback-hml.yaml
+
+          kubectl rollout status deployment/reviewfilmes \
+            -n hml \
+            --timeout=180s
+
+          echo "Imagem anterior restaurada com sucesso."
+
+      - name: Verificar rollout PostgreSQL
+        if: ${{ success() }}
+        run: |
+          kubectl rollout status deployment/postgre \
+            -n hml \
+            --timeout=180s

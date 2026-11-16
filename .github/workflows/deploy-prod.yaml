@@ -1,0 +1,55 @@
+
+name: Deploy Produção
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: "Tag da imagem Docker para produção"
+        required: true
+        type: string
+
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag da imagem Docker para produção"
+        required: true
+        type: string
+
+jobs:
+  deploy-prod:
+    name: Deploy Kubernetes PROD
+    runs-on: self-hosted
+    environment: production
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Validar manifesto Kubernetes PROD
+        run: |
+          kubectl apply --dry-run=client \
+            -f k8s/prod/deployment.yaml \
+            -n prod
+
+      - name: Verificar pré-requisitos PROD
+        run: |
+          kubectl wait \
+            --for=jsonpath='{.status.phase}'=Bound \
+            pvc/pvc-postgres-prod \
+            -n prod \
+            --timeout=60s
+
+          kubectl get secret postgres-credentials -n prod -o name
+
+      - name: Aplicar manifestos PROD com imagem versionada
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          sed "s|networkshtech/desafio-cicd:latest|networkshtech/desafio-cicd:${IMAGE_TAG}|g" \
+            k8s/prod/deployment.yaml | kubectl apply -n prod -f -
+
+      - name: Verificar rollout PROD
+        run: |
+          kubectl rollout status deployment/postgre -n prod --timeout=180s
+          kubectl rollout status deployment/reviewfilmes -n prod --timeout=180s

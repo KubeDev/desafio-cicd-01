@@ -1,0 +1,30 @@
+name: Provisionamento Storage HML
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/ambientes-hml-prod
+    paths:
+      - ".github/workflows/storage-hml.yaml"
+
+jobs:
+  storage:
+    name: Provisionar PV HML
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Provisionar PersistentVolume
+        run: kubectl apply -f k8s/hml/pv-postgres-hml.yaml
+      
+      - name: Verifica Resultado do Provisionamento
+        run: kubectl get pv pv-postgres-hml
+
+      - name: Provisionar PVC
+        run: kubectl apply -f k8s/hml/pvc-postgres-hml.yaml
+
+      - name: Verifica Resultado do PVC
+        run: kubectl get pvc pvc-postgres-hml -n hml

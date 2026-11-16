@@ -1,0 +1,84 @@
+name: Execução de Teste
+
+on:
+    workflow_call:
+
+jobs:
+    unit-test:
+        name: Teste de Unidade
+        runs-on: ubuntu-latest
+        steps:
+          - name: Obtendo o código do projeto
+            uses: actions/checkout@v4
+          - name: Setup dotnet
+            uses: actions/setup-dotnet@v4
+            with:
+                dotnet-version: "8.0.300"
+          - name: Execução do Teste de Unidade
+            working-directory: ./src
+            run: dotnet test ./Review-Filmes.Test.Unit/Review-Filmes.Test.Unit.csproj
+                    
+    integration-test:
+        name: Teste de Integração
+        runs-on: ubuntu-latest
+        services:
+            postgre:
+                image: postgres:latest
+                ports:
+                    - 5432:5432
+                env:
+                    POSTGRES_USER: review
+                    POSTGRES_PASSWORD: postgrespwd
+                    POSTGRES_DB: review-filmes
+        steps:
+          - name: Obtendo o código do projeto
+            uses: actions/checkout@v4
+          - name: Setup dotnet
+            uses: actions/setup-dotnet@v4
+            with:
+                dotnet-version: "8.0.300"
+          - name: Execução do Teste de Integração
+            working-directory: ./src
+            run: dotnet test ./Review-Filmes.Test.Integration/Review-Filmes.Test.Integration.csproj
+        env:
+            ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=review-filmes;Username=review;Password=postgrespwd"
+
+    sonarqube:
+        name: Scan com o Sonarqube
+        runs-on: self-hosted
+        steps:
+          - name: Obtendo o código do projeto
+            uses: actions/checkout@v4
+          - name: Setup JDK
+            uses: actions/setup-java@v5
+            with:
+                java-version: '21'
+                distribution: 'temurin'
+          - name: Setup dotnet
+            uses: actions/setup-dotnet@v4
+            with:
+                dotnet-version: "8.0.300"
+          - name: Instalação e Execução do Sonarqube Scanner
+            working-directory: ./src
+            run: |
+                export PATH="$PATH:/root/.dotnet/tools"
+                
+                dotnet tool uninstall --global dotnet-sonarscanner || true
+                dotnet tool install --global dotnet-sonarscanner --version 11.3.0
+                
+                dotnet sonarscanner begin /k:"filmes" /d:sonar.host.url="${{ secrets.SONAR_HOST_URL }}" /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
+                dotnet build Review-Filmes.sln
+                dotnet sonarscanner end /d:sonar.login="${{ secrets.SONAR_TOKEN }}"
+                
+          - name: Verificação do Quality Gate
+            uses: sonarsource/sonarqube-quality-gate-action@master
+            id: sonarqube-quality-gate-check
+            env:
+                SONAR_TOKEN: "${{ secrets.SONAR_TOKEN }}"
+                SONAR_HOST_URL: "${{ secrets.SONAR_HOST_URL }}"
+            with:
+                scanMetadataReportFile: ./src/.sonarqube/out/.sonar/report-task.txt
+                pollingTimeoutSec: 300
+          - name: "Exibir status quality gate"
+            if: ${{ always() }}
+            run: echo "O status do quality gate é ${{ steps.sonarqube-quality-gate-check.outputs.quality-gate-status }}"
