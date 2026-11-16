@@ -1,7 +1,7 @@
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Review_Filmes.Web.Entity;
+using ReviewFilmes.Api.Entity;
 
 public class PostgresHealthCheck : IHealthCheck
 {
