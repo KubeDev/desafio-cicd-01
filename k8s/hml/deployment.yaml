@@ -20,10 +20,9 @@ spec:
       securityContext:
         runAsUser: 999
         runAsGroup: 999
+
       #nodeSelector:
       #  kubernetes.io/hostname: k8s-worker-1
-
-    
 
       containers:
         - name: postgre
@@ -111,6 +110,26 @@ spec:
             - name: http
               containerPort: 8080
               protocol: TCP
+
+          # Verifica se a aplicação está viva
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # Verifica se pode receber tráfego
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
 
 ---
 # Service da Aplicação Web
