@@ -1,5 +1,6 @@
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Prometheus;
 using Review_Filmes.Web.Entity;
 using Review_Filmes.Web.Repository;
@@ -15,7 +16,10 @@ builder.Services.AddScoped<IFilmeRepository, FilmeRepository>();
 builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
 
 // Health Checks
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddCheck<PostgresHealthCheck>(
+        "postgresql",
+        tags: new[] { "ready" });
 
 builder.Services.AddControllersWithViews();
 
@@ -43,9 +47,17 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
 
-// Endpoints de Health Check
-app.MapHealthChecks("/health/live");
-app.MapHealthChecks("/health/ready");
+// Liveness: verifica apenas a aplicação
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = check => false
+});
+
+// Readiness: verifica a conexão com PostgreSQL
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
 
 app.UseEndpoints(endpoints =>
 {
